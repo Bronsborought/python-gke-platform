@@ -112,3 +112,73 @@ Tests use temporary storage and do not modify local application data.
 - `scripts/` — setup, verification, and teardown scripts.
 - `docs/` — architecture, operating instructions, and acceptance evidence.
 - `.github/workflows/` — CI workflows.
+
+## Local Docker run
+
+Build the image:
+
+```bash
+docker build -t python-gke-platform:local .
+```
+
+The image uses Python 3.14 slim and a multi-stage build.
+The application runs as UID/GID 10001 without root privileges.
+The locally verified linux/amd64 image size was 194.10 MB.
+
+Create persistent storage and start the container:
+
+```bash
+docker volume create python-gke-platform-data
+
+docker run -d \
+  --name python-gke-platform-local \
+  -p 127.0.0.1:8001:8000 \
+  -e APP_ENV=local \
+  --mount type=volume,source=python-gke-platform-data,target=/data \
+  python-gke-platform:local
+```
+
+The application is available at http://127.0.0.1:8001.
+The container defaults to PORT=8000 and DATA_DIR=/data.
+If PORT is overridden, update the container port mapping accordingly.
+
+Wait for readiness:
+
+```bash
+curl --retry 10 --retry-all-errors --retry-delay 1 \
+  --max-time 3 --retry-max-time 20 \
+  -fsS http://127.0.0.1:8001/ready
+```
+
+Write and read data:
+
+```bash
+curl -fsS -X POST http://127.0.0.1:8001/data \
+  -H 'Content-Type: application/json' \
+  -d '{"content":"Hello from Docker volume"}'
+
+curl -fsS http://127.0.0.1:8001/data
+```
+
+Inspect logs and metrics:
+
+```bash
+docker logs --tail 30 python-gke-platform-local
+curl -fsS http://127.0.0.1:8001/metrics
+```
+
+Stop and remove the container:
+
+```bash
+docker stop python-gke-platform-local
+docker rm python-gke-platform-local
+```
+
+The named volume remains after container removal. Run the same
+`docker run` command again to reuse the saved data.
+
+To permanently delete the stored data after removing the container:
+
+```bash
+docker volume rm python-gke-platform-data
+```
