@@ -13,8 +13,18 @@ Terraform, GitHub Actions, JFrog Artifactory, Helm, and Argo CD.
 
 ## Status
 
-The application has been implemented and tested locally with Python 3.14.
-Docker packaging, cloud infrastructure, and GitOps delivery are not yet implemented.
+Implemented and verified:
+- Python application and automated tests.
+- Docker packaging with non-root execution and local persistent storage.
+- GitHub Actions checks and vulnerability scanning.
+- Terraform GCS backend, custom networking, Cloud NAT and private GKE nodes.
+- JFrog Docker image publication and image pull from GKE.
+- Python package download through the JFrog PyPI proxy.
+
+Helm deployment, Argo CD delivery and cluster observability are next.
+
+See [GCP infrastructure](infra/README.md) for infrastructure setup,
+access, verification and cleanup guidance.
 
 ## Local setup
 
@@ -108,7 +118,7 @@ Tests use temporary storage and do not modify local application data.
 
 - `app/` — Python application.
 - `tests/` — application tests.
-- `terraform/` — infrastructure configuration and modules.
+- `infra/` — infrastructure configuration, modules and verification manifests.
 - `scripts/` — setup, verification, and teardown scripts.
 - `docs/` — architecture, operating instructions, and acceptance evidence.
 - `.github/workflows/` — CI workflows.

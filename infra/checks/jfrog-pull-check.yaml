@@ -1,0 +1,47 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: jfrog-pull-check
+  namespace: platform-staging
+spec:
+  serviceAccountName: python-platform
+  restartPolicy: Never
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 10001
+    runAsGroup: 10001
+    fsGroup: 10001
+  containers:
+    - name: app
+      image: trialokuvu3.jfrog.io/docker-local/python-gke-platform:local
+      imagePullPolicy: Always
+      env:
+        - name: APP_ENV
+          value: staging
+        - name: DATA_DIR
+          value: /data
+      ports:
+        - containerPort: 8000
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: ["ALL"]
+      resources:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+        limits:
+          cpu: 500m
+          memory: 256Mi
+      readinessProbe:
+        httpGet:
+          path: /ready
+          port: 8000
+        initialDelaySeconds: 2
+        periodSeconds: 5
+      volumeMounts:
+        - name: data
+          mountPath: /data
+  volumes:
+    - name: data
+      emptyDir: {}
