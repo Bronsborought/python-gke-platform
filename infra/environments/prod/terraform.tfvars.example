@@ -1,0 +1,4 @@
+project_id = "your-gcp-project-id"
+region     = "europe-west1"
+zone       = "europe-west1-b"
+admin_cidr = "203.0.113.10/32"
