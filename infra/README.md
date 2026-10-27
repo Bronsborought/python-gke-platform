@@ -31,11 +31,11 @@ gcloud auth application-default login
 
 ## Bootstrap
 
-Copy `bootstrap/terraform.tfvars.example` to
-`bootstrap/terraform.tfvars` and fill in the project, region and bucket name.
+Copy `infra/bootstrap/terraform.tfvars.example` to
+`infra/bootstrap/terraform.tfvars` and fill in the project, region and bucket name.
 
-Copy `bootstrap/backend.tfbackend.example` to
-`bootstrap/backend.tfbackend` and set the same bucket name.
+Copy `infra/bootstrap/backend.tfbackend.example` to
+`infra/bootstrap/backend.tfbackend` and set the same bucket name.
 
 ### Fresh deployment
 
