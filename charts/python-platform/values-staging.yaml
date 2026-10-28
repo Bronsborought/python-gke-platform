@@ -1,0 +1,6 @@
+app:
+  environment: staging
+  logLevel: INFO
+
+ingress:
+  enabled: false
