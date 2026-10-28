@@ -46,3 +46,6 @@ pdb:
 ingress:
   enabled: false
   host: ""
+
+serviceAccount:
+  annotations: {}
