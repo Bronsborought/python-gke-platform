@@ -1,0 +1,22 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "python-platform.name" . }}
+  labels:
+    {{- include "python-platform.labels" . | nindent 4 }}
+  annotations:
+    kubernetes.io/ingress.class: gce
+spec:
+  rules:
+    - {{ if .Values.ingress.host }}host: {{ .Values.ingress.host | quote }}{{ end }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "python-platform.name" . }}
+                port:
+                  number: {{ .Values.service.port }}
+{{- end }}

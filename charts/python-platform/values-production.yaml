@@ -1,0 +1,6 @@
+app:
+  environment: production
+  logLevel: INFO
+
+ingress:
+  enabled: true

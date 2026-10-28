@@ -1,0 +1,48 @@
+image:
+  repository: trialokuvu3.jfrog.io/docker-local/python-gke-platform
+  tag: local
+  digest: ""
+  pullPolicy: Always
+
+imagePullSecrets:
+  - name: jfrog-registry
+
+replicaCount: 2
+
+app:
+  environment: staging
+  logLevel: INFO
+  port: 8000
+  dataDir: /data
+  existingSecret: python-platform-app
+
+service:
+  port: 80
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+persistence:
+  storageClass: standard-rwo
+  size: 1Gi
+  accessMode: ReadWriteOnce
+  colocateReplicas: true
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 5
+  cpuUtilization: 70
+  memoryUtilization: 80
+
+pdb:
+  minAvailable: 1
+
+ingress:
+  enabled: false
+  host: ""
