@@ -192,3 +192,24 @@ To permanently delete the stored data after removing the container:
 ```bash
 docker volume rm python-gke-platform-data
 ```
+
+## Raspberry Pi CM5 hybrid edge
+
+Initial hardware and operating system setup verified:
+- Compute module: Raspberry Pi Compute Module 5 Lite Rev 1.0 (8 GB RAM, no onboard eMMC).
+- Carrier board: Waveshare CM5-IO-BASE-B with passive heatsink, external SMA antenna (`dtparam=ant2`), and official 27W USB-C power supply (`throttled=0x0`).
+- Storage: 512 GB M.2 2230 PCIe NVMe SSD (`/dev/nvme0n1`, 476.9 GiB usable, Biwin/KingSpec controller supporting PCIe Gen 3 `8GT/s`, initial link `5GT/s`).
+- Operating system: Ubuntu Server 24.04.5 LTS (`aarch64`, kernel `6.8.0-1064-raspi`), hostname `cm5-node`.
+- Access and network: Ed25519 SSH key authentication, passwordless `sudo`, and MAC-based DHCP lease over Wi-Fi (`wlan0`) and Ethernet (`eth0`).
+
+Storage layout decision for ZFS:
+- Because the module is a CM5 Lite without onboard eMMC, the operating system boots from `/dev/nvme0n1` (`nvme0n1p1` `/boot/firmware` and `nvme0n1p2` `/`).
+- Using the whole `/dev/nvme0n1` device directly for `zpool create` would overwrite the running OS; therefore, the NVMe SSD will be partitioned so the OS remains on `nvme0n1p1`/`nvme0n1p2` and the ZFS pool `datapool` uses a dedicated partition (`/dev/nvme0n1p3`) on the same NVMe drive.
+
+Next steps (not yet executed):
+- Module 1: Ansible bootstrap (`ansible/rpi-cm5-bootstrap.yml`).
+- Module 2: ZFS pool `datapool`, datasets/quotas, NFSv4 export, and encrypted GCS backups.
+- Module 3: Site-to-cloud WireGuard VPN tunnel to GCP VPC.
+- Module 4: Native ARM64 GitHub Actions runner and multi-arch publishing to JFrog Artifactory.
+- Module 5: K3s edge node managed by central Argo CD in GKE.
+- Module 6: Hardware metrics (`node_exporter` + textfile collector) in Prometheus and Grafana.
