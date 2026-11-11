@@ -1,0 +1,37 @@
+=== AC-RPI-02: ZFS Pool, Compression & Quota Enforcement Proof ===
+Captured: 2026-11-11T16:36:15Z
+--- 1. ZFS Pool Status & Properties ---
+  pool: datapool
+ state: ONLINE
+config:
+
+	NAME         STATE     READ WRITE CKSUM
+	datapool     ONLINE       0     0     0
+	  nvme0n1p3  ONLINE       0     0     0
+
+errors: No known data errors
+NAME      PROPERTY  VALUE   SOURCE
+datapool  ashift    12      local
+NAME                      PROPERTY     VALUE                 SOURCE
+datapool                  compression  zstd                  local
+datapool                  atime        off                   local
+datapool                  quota        none                  default
+datapool                  mountpoint   /datapool             default
+datapool/annotation-data  compression  zstd                  inherited from datapool
+datapool/annotation-data  atime        off                   inherited from datapool
+datapool/annotation-data  quota        50G                   local
+datapool/annotation-data  mountpoint   /srv/data/annotation  local
+datapool/app-state        compression  zstd-3                local
+datapool/app-state        atime        off                   inherited from datapool
+datapool/app-state        quota        20G                   local
+datapool/app-state        mountpoint   /srv/data/app-state   local
+--- 2. Quota Enforcement Test (Disk quota exceeded) ---
+dd: error writing '/srv/data/app-state/quota_test.bin': Disk quota exceeded
+11+0 records in
+10+0 records out
+10485760 bytes (10 MB, 10 MiB) copied, 0.368858 s, 28.4 MB/s
+--- 3. Final Restored Dataset Quotas ---
+NAME                       USED  AVAIL  REFER  QUOTA  COMPRESS        MOUNTPOINT
+datapool                   840K   316G    96K   none  zstd            /datapool
+datapool/annotation-data    96K  50.0G    96K    50G  zstd            /srv/data/annotation
+datapool/app-state          96K  20.0G    96K    20G  zstd-3          /srv/data/app-state
