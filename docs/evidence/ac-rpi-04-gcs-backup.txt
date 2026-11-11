@@ -1,0 +1,22 @@
+=== AC-RPI-04: ZFS Snapshot & Encrypted GCS Backup Proof ===
+Captured: 2026-11-11T17:28:57Z
+--- 1. Execute Full Encrypted Backup ---
+[2026-11-11T17:28:57Z] [INFO] Starting atomic ZFS snapshot datapool/annotation-data@backup-20261111-172857 on bronsborought@192.168.88.59
+[2026-11-11T17:28:59Z] [INFO] Exporting full ZFS stream (datapool/annotation-data@backup-20261111-172857) with zstd + AES-256 encryption
+[2026-11-11T17:28:59Z] [INFO] Uploading encrypted full backup (sha256=ab1fb1096c3980b5e69c350d0ad2fa33d2d973a2fb616e5e08d388e244b87193) to gs://python-gke-dt-20261027-onprem-backups/zfs-backups/annotation-data-20261111-172857-full.zfs.zst.enc
+[2026-11-11T17:29:25Z] [INFO] Backup completed successfully: gs://python-gke-dt-20261027-onprem-backups/zfs-backups/annotation-data-20261111-172857-full.zfs.zst.enc
+--- 2. Add New File & Execute Incremental Encrypted Backup ---
+[2026-11-11T17:29:27Z] [INFO] Starting atomic ZFS snapshot datapool/annotation-data@backup-20261111-172927 on bronsborought@192.168.88.59
+[2026-11-11T17:29:28Z] [INFO] Exporting incremental ZFS stream (datapool/annotation-data@backup-20261111-172857 -> datapool/annotation-data@backup-20261111-172927) with zstd + AES-256 encryption
+[2026-11-11T17:29:28Z] [INFO] Uploading encrypted incremental backup (sha256=1d4b851d0d35aefc4ceabd191b475e34de5b750071702af074f05c5024d15025) to gs://python-gke-dt-20261027-onprem-backups/zfs-backups/annotation-data-20261111-172927-incr.zfs.zst.enc
+[2026-11-11T17:29:51Z] [INFO] Backup completed successfully: gs://python-gke-dt-20261027-onprem-backups/zfs-backups/annotation-data-20261111-172927-incr.zfs.zst.enc
+--- 3. Verify ZFS Snapshots on CM5 ---
+NAME                                              USED  AVAIL  REFER  MOUNTPOINT
+datapool/annotation-data@hourly-20261111-172514     0B      -    96K  -
+datapool/annotation-data@backup-20261111-172857     0B      -    96K  -
+datapool/annotation-data@backup-20261111-172927     0B      -   104K  -
+datapool/app-state@hourly-20261111-172514           0B      -    96K  -
+--- 4. Verify Encrypted Objects in GCS Bucket ---
+      3104  2026-11-11T17:29:27Z  gs://python-gke-dt-20261027-onprem-backups/zfs-backups/annotation-data-20261111-172857-full.zfs.zst.enc
+      1216  2026-11-11T17:29:52Z  gs://python-gke-dt-20261027-onprem-backups/zfs-backups/annotation-data-20261111-172927-incr.zfs.zst.enc
+TOTAL: 2 objects, 4320 bytes (4.22kiB)

@@ -1,0 +1,15 @@
+=== AC-RPI-03: NFSv4 Mount & Non-Root UTF-8 Read/Write Proof ===
+Captured: 2026-11-11T17:17:51Z
+--- 1. Mounted NFSv4 Filesystem on Client (WSL) ---
+Filesystem                         Type  Size  Used Avail Use% Mounted on
+192.168.88.59:/srv/data/annotation nfs4   50G     0   50G   0% /mnt/test
+--- 2. Non-Root Write & Read Test (UTF-8) ---
+Current client user: dtarakanov (UID=1000, GID=1000)
+{"project":"cm5-edge","note":"UTF-8 sample: cafe-naive-resume"}
+-rw-r--r-- 1 1000 1000 64 Nov 11  2026 /mnt/test/annotation_sample.json
+--- 3. Verify File Persisted on CM5 ZFS Dataset ---
+total 5
+drwxrwxr-x 2 bronsborought bronsborought    3 Nov 11 19:17 .
+drwxr-xr-x 4 root          root          4096 Nov 11 18:32 ..
+-rw-r--r-- 1 bronsborought bronsborought   64 Nov 11 19:17 annotation_sample.json
+{"project":"cm5-edge","note":"UTF-8 sample: cafe-naive-resume"}
