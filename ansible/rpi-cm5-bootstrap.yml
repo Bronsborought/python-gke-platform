@@ -1,0 +1,196 @@
+---
+- name: Bootstrap Raspberry Pi CM5 Hybrid Edge Node
+  hosts: rpi_edge
+  become: true
+  vars:
+    edge_user: bronsborought
+    lan_cidr: "192.168.88.0/24"
+    docker_arch: arm64
+    ubuntu_codename: noble
+
+  tasks:
+    - name: Ensure apt keyrings directory exists
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: "0755"
+
+    - name: Download Docker official GPG key
+      ansible.builtin.get_url:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        dest: /etc/apt/keyrings/docker.asc
+        mode: "0644"
+        force: false
+
+    - name: Configure Docker CE apt repository for ARM64
+      ansible.builtin.copy:
+        dest: /etc/apt/sources.list.d/docker.list
+        mode: "0644"
+        content: |
+          deb [arch={{ docker_arch }} signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu {{ ubuntu_codename }} stable
+
+    - name: Install required system, storage, networking, and Docker packages
+      ansible.builtin.apt:
+        name:
+          - ca-certificates
+          - curl
+          - gnupg
+          - jq
+          - ufw
+          - zram-tools
+          - zfsutils-linux
+          - nfs-kernel-server
+          - wireguard
+          - wireguard-tools
+          - nvme-cli
+          - smartmontools
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-buildx-plugin
+          - docker-compose-plugin
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Ensure edge user is in docker and adm groups
+      ansible.builtin.user:
+        name: "{{ edge_user }}"
+        groups:
+          - docker
+          - adm
+          - sudo
+        append: true
+
+    - name: Enable PCIe Gen 3 and external antenna in /boot/firmware/config.txt
+      ansible.builtin.blockinfile:
+        path: /boot/firmware/config.txt
+        marker: "# {mark} ANSIBLE MANAGED CM5 EDGE HARDWARE"
+        block: |
+          [all]
+          dtparam=ant2
+          dtparam=pciex1
+          dtparam=pciex1_gen=3
+
+    - name: Configure zram swap settings
+      ansible.builtin.copy:
+        dest: /etc/default/zramswap
+        mode: "0644"
+        content: |
+          ALGO=zstd
+          PERCENT=50
+          PRIORITY=100
+      notify: Restart zramswap
+
+    - name: Configure kernel sysctl parameters for Edge, ZFS, WireGuard, and K3s
+      ansible.builtin.copy:
+        dest: /etc/sysctl.d/99-cm5-edge.conf
+        mode: "0644"
+        content: |
+          vm.swappiness = 80
+          net.ipv4.ip_forward = 1
+          net.ipv6.conf.all.forwarding = 1
+          fs.inotify.max_user_watches = 524288
+          fs.inotify.max_user_instances = 512
+      notify: Apply sysctl
+
+    - name: Harden SSH daemon (key-only authentication, disable password login)
+      ansible.builtin.copy:
+        dest: /etc/ssh/sshd_config.d/99-cm5-hardening.conf
+        mode: "0644"
+        content: |
+          PubkeyAuthentication yes
+          PasswordAuthentication no
+          KbdInteractiveAuthentication no
+          ChallengeResponseAuthentication no
+          PermitRootLogin no
+        validate: "/usr/sbin/sshd -t -f %s"
+      notify: Reload ssh
+
+    - name: Set UFW default forward policy to ACCEPT for K3s and WireGuard
+      ansible.builtin.lineinfile:
+        path: /etc/default/ufw
+        regexp: '^DEFAULT_FORWARD_POLICY='
+        line: 'DEFAULT_FORWARD_POLICY="ACCEPT"'
+      notify: Reload ufw
+
+    - name: Allow SSH in UFW
+      community.general.ufw:
+        rule: allow
+        port: "22"
+        proto: tcp
+
+    - name: Allow WireGuard UDP port in UFW
+      community.general.ufw:
+        rule: allow
+        port: "51820"
+        proto: udp
+
+    - name: Allow NFSv4 from local LAN in UFW
+      community.general.ufw:
+        rule: allow
+        from_ip: "{{ lan_cidr }}"
+        port: "2049"
+        proto: tcp
+
+    - name: Allow K3s API port in UFW
+      community.general.ufw:
+        rule: allow
+        port: "6443"
+        proto: tcp
+
+    - name: Allow Node Exporter port in UFW
+      community.general.ufw:
+        rule: allow
+        port: "9100"
+        proto: tcp
+
+    - name: Allow all traffic on WireGuard interface wg0
+      community.general.ufw:
+        rule: allow
+        interface: wg0
+        direction: in
+
+    - name: Allow all traffic on K3s CNI interfaces
+      community.general.ufw:
+        rule: allow
+        interface: "{{ item }}"
+        direction: in
+      loop:
+        - cni0
+        - flannel.1
+
+    - name: Enable UFW firewall with default deny incoming
+      community.general.ufw:
+        state: enabled
+        default: deny
+        direction: incoming
+
+    - name: Ensure core services are enabled and running
+      ansible.builtin.service:
+        name: "{{ item }}"
+        enabled: true
+        state: started
+      loop:
+        - docker
+        - zramswap
+        - ssh
+
+  handlers:
+    - name: Restart zramswap
+      ansible.builtin.service:
+        name: zramswap
+        state: restarted
+
+    - name: Apply sysctl
+      ansible.builtin.command: sysctl --system
+      changed_when: true
+
+    - name: Reload ssh
+      ansible.builtin.service:
+        name: ssh
+        state: reloaded
+
+    - name: Reload ufw
+      community.general.ufw:
+        state: reloaded

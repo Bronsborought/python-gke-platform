@@ -1,0 +1,107 @@
+=== AC-RPI-01: Ansible Idempotency & Hardware Bootstrap Proof ===
+Captured: 2026-11-11T16:25:18Z
+
+--- 1. Re-run ansible-playbook (changed=0) ---
+
+PLAY [Bootstrap Raspberry Pi CM5 Hybrid Edge Node] *****************************
+
+TASK [Gathering Facts] *********************************************************
+ok: [cm5-node]
+
+TASK [Ensure apt keyrings directory exists] ************************************
+ok: [cm5-node]
+
+TASK [Download Docker official GPG key] ****************************************
+ok: [cm5-node]
+
+TASK [Configure Docker CE apt repository for ARM64] ****************************
+ok: [cm5-node]
+
+TASK [Install required system, storage, networking, and Docker packages] *******
+ok: [cm5-node]
+
+TASK [Ensure edge user is in docker and adm groups] ****************************
+ok: [cm5-node]
+
+TASK [Enable PCIe Gen 3 and external antenna in /boot/firmware/config.txt] *****
+ok: [cm5-node]
+
+TASK [Configure zram swap settings] ********************************************
+ok: [cm5-node]
+
+TASK [Configure kernel sysctl parameters for Edge, ZFS, WireGuard, and K3s] ****
+ok: [cm5-node]
+
+TASK [Harden SSH daemon (key-only authentication, disable password login)] *****
+ok: [cm5-node]
+
+TASK [Set UFW default forward policy to ACCEPT for K3s and WireGuard] **********
+ok: [cm5-node]
+
+TASK [Allow SSH in UFW] ********************************************************
+ok: [cm5-node]
+
+TASK [Allow WireGuard UDP port in UFW] *****************************************
+ok: [cm5-node]
+
+TASK [Allow NFSv4 from local LAN in UFW] ***************************************
+ok: [cm5-node]
+
+TASK [Allow K3s API port in UFW] ***********************************************
+ok: [cm5-node]
+
+TASK [Allow Node Exporter port in UFW] *****************************************
+ok: [cm5-node]
+
+TASK [Allow all traffic on WireGuard interface wg0] ****************************
+ok: [cm5-node]
+
+TASK [Allow all traffic on K3s CNI interfaces] *********************************
+ok: [cm5-node] => (item=cni0)
+ok: [cm5-node] => (item=flannel.1)
+
+TASK [Enable UFW firewall with default deny incoming] **************************
+ok: [cm5-node]
+
+TASK [Ensure core services are enabled and running] ****************************
+ok: [cm5-node] => (item=docker)
+ok: [cm5-node] => (item=zramswap)
+ok: [cm5-node] => (item=ssh)
+
+PLAY RECAP *********************************************************************
+cm5-node                   : ok=20   changed=0    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+
+
+--- 2. PCIe Gen 3 (8GT/s), ZRAM, Docker, ZFS & UFW Verification ---
+		LnkSta:	Speed 8GT/s, Width x1
+0000:01:00.0 Non-Volatile memory controller: Biwin Storage Technology Co., Ltd. KingSpec NX series NVMe SSD (DRAM-less) (rev 01) (prog-if 02 [NVM Express])
+		LnkSta:	Speed 8GT/s, Width x1 (downgraded)
+		LnkSta:	Speed 5GT/s, Width x4
+		LnkSta:	Speed 5GT/s, Width x4
+               total        used        free      shared  buff/cache   available
+Mem:           7.8Gi       561Mi       6.9Gi       3.4Mi       508Mi       7.2Gi
+Swap:          3.9Gi          0B       3.9Gi
+NAME       TYPE      SIZE USED PRIO
+/dev/zram0 partition 3.9G   0B  100
+Docker version 29.9.3, build 5457199
+zfs-2.2.2-0ubuntu9.5
+Status: active
+
+To                         Action      From
+--                         ------      ----
+22/tcp                     ALLOW       Anywhere                  
+51820/udp                  ALLOW       Anywhere                  
+2049/tcp                   ALLOW       192.168.88.0/24           
+6443/tcp                   ALLOW       Anywhere                  
+9100/tcp                   ALLOW       Anywhere                  
+Anywhere on wg0            ALLOW       Anywhere                  
+Anywhere on cni0           ALLOW       Anywhere                  
+Anywhere on flannel.1      ALLOW       Anywhere                  
+22/tcp (v6)                ALLOW       Anywhere (v6)             
+51820/udp (v6)             ALLOW       Anywhere (v6)             
+6443/tcp (v6)              ALLOW       Anywhere (v6)             
+9100/tcp (v6)              ALLOW       Anywhere (v6)             
+Anywhere (v6) on wg0       ALLOW       Anywhere (v6)             
+Anywhere (v6) on cni0      ALLOW       Anywhere (v6)             
+Anywhere (v6) on flannel.1 ALLOW       Anywhere (v6)             
+
