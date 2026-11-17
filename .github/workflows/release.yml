@@ -1,136 +1,104 @@
 name: Release
+
 on:
-  workflow_run:
-    workflows: [CI]
-    types: [completed]
-    branches: [main]
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version tag (e.g. v1.2.0)"
+        required: true
+        default: "v1.2.0"
+
 permissions:
-  contents: read
-concurrency:
-  group: release-main
-  cancel-in-progress: false
+  contents: write
+
+env:
+  REGISTRY: trial2mrxfh.jfrog.io
+  IMAGE_NAME: docker-local/python-platform-app
+
 jobs:
-  build:
-    if: >-
-      github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.event == 'push' &&
-      github.event.workflow_run.head_branch == 'main' &&
-      github.event.workflow_run.head_repository.full_name == github.repository
+  build-amd64:
+    name: Build & Push (linux/amd64)
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
-    strategy:
-      fail-fast: false
-      matrix:
-        arch: [amd64, arm64]
-    env:
-      RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
-      REGISTRY: trialokuvu3.jfrog.io
-      IMAGE_REPO: trialokuvu3.jfrog.io/docker-local/python-gke-platform
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.workflow_run.head_sha }}
-          persist-credentials: false
-      - uses: docker/setup-qemu-action@v3
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Determine release version
+        id: meta
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION="${GITHUB_REF_NAME}"
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to JFrog Artifactory
+        uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
-          username: ${{ secrets.JFROG_USERNAME }}
+          username: ${{ secrets.JFROG_USER }}
           password: ${{ secrets.JFROG_TOKEN }}
-      - name: Compute immutable release tag
-        shell: bash
-        run: |
-          set -euo pipefail
-          VERSION=$(tr -d '\r\n' < VERSION)
-          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
-          TAG="v${VERSION}-${RELEASE_SHA:0:12}"
-          echo "TAG=$TAG" >> "$GITHUB_ENV"
-          echo "ARCH_IMAGE=$IMAGE_REPO:$TAG-${{ matrix.arch }}" >> "$GITHUB_ENV"
-      - name: Build one architecture
-        run: |
-          docker buildx build --platform linux/${{ matrix.arch }} \
-            --load --provenance=false -t "$ARCH_IMAGE" .
-      - name: Verify size and user
-        shell: bash
-        run: |
-          set -euo pipefail
-          size=$(docker image inspect "$ARCH_IMAGE" --format '{{.Size}}')
-          echo "Uncompressed image bytes: $size"
-          test "$size" -le 200000000
-          test "$(docker run --rm --entrypoint id "$ARCH_IMAGE" -u)" = 10001
-      - name: Scan the exact image to publish
-        uses: aquasecurity/trivy-action@v0.36.0
+
+      - name: Build and push linux/amd64 image
+        uses: docker/build-push-action@v6
         with:
-          scan-type: image
-          image-ref: ${{ env.ARCH_IMAGE }}
-          scanners: vuln
-          severity: CRITICAL
-          ignore-unfixed: true
-          exit-code: '1'
-          format: table
-          timeout: 10m0s
-      - name: Push scanned architecture
-        run: docker push "$ARCH_IMAGE"
-  promote:
-    needs: build
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    env:
-      RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
-      IMAGE_REPO: trialokuvu3.jfrog.io/docker-local/python-gke-platform
-      GH_TOKEN: ${{ secrets.GITOPS_TOKEN }}
+          context: .
+          platforms: linux/amd64
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}-amd64
+
+  build-arm64:
+    name: Build & Push Native ARM64 (RPi CM5)
+    runs-on: [self-hosted, linux, arm64, rpi-cm5]
+    needs: build-amd64
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Verify native ARM64 hardware architecture
+        run: |
+          echo "Building natively on host: $(hostname) ($(uname -m))"
+          cat /proc/device-tree/model && echo ""
+
+      - name: Log in to JFrog Artifactory
+        run: |
+          echo "${{ secrets.JFROG_TOKEN }}" | docker login "${{ env.REGISTRY }}" -u "${{ secrets.JFROG_USER }}" --password-stdin
+
+      - name: Build and push native linux/arm64 image
+        run: |
+          VERSION="${{ needs.build-amd64.outputs.version }}"
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${VERSION}-arm64"
+          docker build --platform linux/arm64 -t "${IMAGE}" .
+          docker push "${IMAGE}"
+
+  publish-multiarch:
+    name: Assemble Multi-Arch Manifest in JFrog
+    runs-on: ubuntu-24.04
+    needs: [build-amd64, build-arm64]
+    steps:
+      - name: Log in to JFrog Artifactory
+        uses: docker/login-action@v3
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
-          persist-credentials: false
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
-        with:
-          registry: trialokuvu3.jfrog.io
-          username: ${{ secrets.JFROG_USERNAME }}
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.JFROG_USER }}
           password: ${{ secrets.JFROG_TOKEN }}
-      - name: Assemble index and resolve digest
-        shell: bash
+
+      - name: Create and push multi-arch OCI manifest list
         run: |
-          set -euo pipefail
-          VERSION=$(tr -d '\r\n' < VERSION)
-          TAG="v${VERSION}-${RELEASE_SHA:0:12}"
-          docker buildx imagetools create -t "$IMAGE_REPO:$TAG" \
-            "$IMAGE_REPO:$TAG-amd64" "$IMAGE_REPO:$TAG-arm64"
-          docker buildx imagetools inspect "$IMAGE_REPO:$TAG"
-          DIGEST=$(docker buildx imagetools inspect "$IMAGE_REPO:$TAG" |
-            awk '/^Digest:/ {print $2; exit}')
-          [[ "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
-          echo "TAG=$TAG" >> "$GITHUB_ENV"
-          echo "DIGEST=$DIGEST" >> "$GITHUB_ENV"
-      - uses: actions/checkout@v4
-        with:
-          repository: Bronsborought/python-gke-platform-gitops
-          ref: main
-          path: gitops
-          token: ${{ secrets.GITOPS_TOKEN }}
-          persist-credentials: true
-      - name: Open staging promotion PR
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 scripts/promote.py gitops staging "$TAG" "$DIGEST"
-          cd gitops
-          BRANCH="release/staging-${RELEASE_SHA:0:12}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          git switch -c "$BRANCH"
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add environments/staging/values.yaml
-          if git diff --cached --quiet; then
-            echo 'Staging already targets this digest'
-            exit 0
-          fi
-          git commit -m "release: promoted staging to $TAG"
-          git push -u origin "$BRANCH"
-          printf 'Updated staging to `%s`.\n\nImage digest: `%s`\n\nSource commit: `%s`\n\nBoth image architectures passed the CRITICAL vulnerability gate.\n' \
-            "$TAG" "$DIGEST" "$RELEASE_SHA" > /tmp/promotion-body.md
-          gh pr create --repo Bronsborought/python-gke-platform-gitops \
-            --base main --head "$BRANCH" --title "release: promoted staging to $TAG" \
-            --body-file /tmp/promotion-body.md
+          VERSION="${{ needs.build-amd64.outputs.version }}"
+          BASE_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
+          docker buildx imagetools create \
+            -t "${BASE_IMAGE}:${VERSION}" \
+            -t "${BASE_IMAGE}:latest" \
+            "${BASE_IMAGE}:${VERSION}-amd64" \
+            "${BASE_IMAGE}:${VERSION}-arm64"
+          docker buildx imagetools inspect "${BASE_IMAGE}:${VERSION}"
