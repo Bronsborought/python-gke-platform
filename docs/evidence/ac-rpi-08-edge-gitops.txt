@@ -1,0 +1,17 @@
+=== AC-RPI-08: Edge GitOps & K3s Orchestration Evidence ===
+Timestamp: 2026-11-17T03:40:47Z
+
+--- 1. GKE Argo CD Applications Status (Edge K3s Target over WireGuard) ---
+NAME                         SYNC STATUS   HEALTH STATUS   REVISION                                   PROJECT
+edge-ingestion-service                                                                                platform-edge
+platform-monitoring          Synced        Healthy                                                    platform-system
+platform-root                Synced        Healthy         17c6adcce3f1b218c35e3b22932893dbd9f486b1   platform-root
+python-platform-production   Synced        Degraded                                                   python-platform
+python-platform-staging      Synced        Degraded                                                   python-platform
+
+--- 2. Edge K3s Node & Pod Status on Raspberry Pi CM5 ---
+NAME       STATUS   ROLES           AGE   VERSION        INTERNAL-IP   EXTERNAL-IP   OS-IMAGE             KERNEL-VERSION             CONTAINER-RUNTIME
+cm5-node   Ready    control-plane   30m   v1.37.2+k3s1   10.200.0.2    <none>        Ubuntu 24.04.5 LTS   6.8.0-1065-raspi (arm64)   containerd://2.3.7-k3s1
+
+
+--- 3. Verify ZFS Dataset Mount (/data/annotation -> /srv/data/annotation) Inside Edge Pod ---

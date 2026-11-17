@@ -218,6 +218,13 @@
         state: started
       failed_when: false
 
+    - name: Ensure K3s server service is enabled and running on edge node
+      ansible.builtin.systemd:
+        name: k3s
+        enabled: true
+        state: started
+      failed_when: false
+
   handlers:
     - name: Restart WireGuard
       ansible.builtin.systemd:
