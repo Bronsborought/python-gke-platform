@@ -1,0 +1,32 @@
+=== AC-RPI-07: Multi-Architecture OCI Image in JFrog Artifactory ===
+Timestamp: 2026-11-17T02:57:23Z
+Registry: trial2mrxfh.jfrog.io
+Image: trial2mrxfh.jfrog.io/docker-local/python-platform-app:v1.2.0
+
+--- Multi-Arch OCI Manifest Inspection (linux/amd64 + linux/arm64) ---
+Name:      trial2mrxfh.jfrog.io/docker-local/python-platform-app:v1.2.0
+MediaType: application/vnd.oci.image.index.v1+json
+Digest:    sha256:3ded6e02c0ffd7d67b00db66cc83f1e0855a430c1f8192328df75ed53ed3e342
+           
+Manifests: 
+  Name:        trial2mrxfh.jfrog.io/docker-local/python-platform-app:v1.2.0@sha256:8e215f382497207b4cf0a7d02edb9b5bf69f6700d808c4bbffd17a817e5f24bc
+  MediaType:   application/vnd.oci.image.manifest.v1+json
+  Platform:    linux/amd64
+               
+  Name:        trial2mrxfh.jfrog.io/docker-local/python-platform-app:v1.2.0@sha256:0d165eb4339fb658e7688d49527087b92d56d12e4ca8ad361d0d58353fe5eac2
+  MediaType:   application/vnd.oci.image.manifest.v1+json
+  Platform:    unknown/unknown
+  Annotations: 
+    vnd.docker.reference.digest: sha256:8e215f382497207b4cf0a7d02edb9b5bf69f6700d808c4bbffd17a817e5f24bc
+    vnd.docker.reference.type:   attestation-manifest
+               
+  Name:        trial2mrxfh.jfrog.io/docker-local/python-platform-app:v1.2.0@sha256:3ba3801be16ef7829f6d4649f81b85116d066eeb7f3811ed9c44fa0133ceea4b
+  MediaType:   application/vnd.oci.image.manifest.v1+json
+  Platform:    linux/arm64
+               
+  Name:        trial2mrxfh.jfrog.io/docker-local/python-platform-app:v1.2.0@sha256:9d1779fc93f3550e508576c917ab86783654792a81d535edd86caf33769c2a67
+  MediaType:   application/vnd.oci.image.manifest.v1+json
+  Platform:    unknown/unknown
+  Annotations: 
+    vnd.docker.reference.digest: sha256:3ba3801be16ef7829f6d4649f81b85116d066eeb7f3811ed9c44fa0133ceea4b
+    vnd.docker.reference.type:   attestation-manifest

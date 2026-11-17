@@ -1,0 +1,56 @@
+=== AC-RPI-06: Native ARM64 CI/CD Self-Hosted Runner on RPi CM5 ===
+Timestamp: 2026-11-17T02:57:18Z
+
+--- 1. GitHub Registered Self-Hosted Runners (API Verification) ---
+{"busy":false,"id":21,"labels":["self-hosted","Linux","ARM64","rpi-cm5"],"name":"cm5-arm64-runner","os":"Linux","status":"online"}
+
+--- 2. Systemd Service Status on RPi CM5 ---
+● actions.runner.Bronsborought-python-gke-platform.cm5-arm64-runner.service - GitHub Actions Runner (Bronsborought-python-gke-platform.cm5-arm64-runner)
+     Loaded: loaded (/etc/systemd/system/actions.runner.Bronsborought-python-gke-platform.cm5-arm64-runner.service; enabled; preset: enabled)
+     Active: active (running) since Tue 2026-11-17 03:53:09 EET; 1h 4min ago
+   Main PID: 5975 (runsvc.sh)
+      Tasks: 20 (limit: 9063)
+     Memory: 156.8M (peak: 244.9M)
+        CPU: 21.825s
+     CGroup: /system.slice/actions.runner.Bronsborought-python-gke-platform.cm5-arm64-runner.service
+             ├─5975 /bin/bash /opt/actions-runner/runsvc.sh
+             ├─5977 ./externals/node24/bin/node ./bin/RunnerService.js
+             └─5991 /opt/actions-runner/bin/Runner.Listener run --startuptype service
+
+Nov 17 03:53:09 cm5-node runsvc.sh[5977]: Starting Runner listener with startup type: service
+Nov 17 03:53:09 cm5-node runsvc.sh[5977]: Started listener process, pid: 5991
+Nov 17 03:53:09 cm5-node runsvc.sh[5977]: Started running service
+Nov 17 03:53:12 cm5-node runsvc.sh[5977]: √ Connected to GitHub
+Nov 17 03:53:13 cm5-node runsvc.sh[5977]: Current runner version: '2.338.2'
+Nov 17 03:53:13 cm5-node runsvc.sh[5977]: 2026-11-17 01:53:13Z: Listening for Jobs
+Nov 17 04:43:50 cm5-node runsvc.sh[5977]: 2026-11-17 02:43:50Z: Running job: Build & Push Native ARM64 (RPi CM5)
+Nov 17 04:45:35 cm5-node runsvc.sh[5977]: 2026-11-17 02:45:35Z: Job Build & Push Native ARM64 (RPi CM5) completed with result: Succeeded
+Nov 17 04:50:03 cm5-node runsvc.sh[5977]: 2026-11-17 02:50:03Z: Running job: Build & Push Native ARM64 (RPi CM5)
+Nov 17 04:50:16 cm5-node runsvc.sh[5977]: 2026-11-17 02:50:16Z: Job Build & Push Native ARM64 (RPi CM5) completed with result: Succeeded
+
+--- 3. Release Workflow Run (44005781495) Jobs Summary ---
+
+✓ feat/rpi-cm5-module4-arm64-ci Release · 44005781495
+Triggered via workflow_dispatch about 7 minutes ago
+
+JOBS
+✓ Build & Push (linux/amd64) in 25s (ID 133780683377)
+✓ Build & Push Native ARM64 (RPi CM5) in 13s (ID 133780855016)
+✓ Assemble Multi-Arch Manifest in JFrog in 19s (ID 133780954915)
+
+ANNOTATIONS
+! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4, docker/build-push-action@v6, docker/login-action@v3, docker/setup-buildx-action@v3. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+Build & Push (linux/amd64): .github#4
+
+! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+Build & Push Native ARM64 (RPi CM5): .github#2
+
+! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: docker/login-action@v3. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+Assemble Multi-Arch Manifest in JFrog: .github#2
+
+
+ARTIFACTS
+Bronsborought~python-gke-platform~K8TLCD.dockerbuild
+
+For more information about a job, try: gh run view --job=<job-id>
+View this run on GitHub: https://github.com/Bronsborought/python-gke-platform/actions/runs/44005781495
