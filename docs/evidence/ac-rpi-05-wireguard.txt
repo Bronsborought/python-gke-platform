@@ -1,0 +1,58 @@
+=== AC-RPI-05: Site-to-Cloud WireGuard VPN Evidence ===
+Timestamp: 2026-11-17T01:27:37Z
+
+--- 1. WireGuard Interface & Peer Handshake on CM5 (sudo wg show) ---
+interface: wg0
+  public key: cDsdUs3GZqOTasjNevbRfJjm1L/TkpqHb4QWr7wRolE=
+  private key: (hidden)
+  listening port: 59754
+
+peer: ICnUPuOCz9vsNzBgkjo5gm89x3hxtZKOEweAQy1RTxM=
+  endpoint: 34.53.145.221:51820
+  allowed ips: 10.200.0.0/24, 10.20.0.0/20
+  latest handshake: 1 minute, 19 seconds ago
+  transfer: 1.68 KiB received, 2.07 KiB sent
+  persistent keepalive: every 25 seconds
+
+wg0              UNKNOWN        10.200.0.2/24 
+
+10.20.0.0/20 dev wg0 scope link 
+10.200.0.0/24 dev wg0 proto kernel scope link src 10.200.0.2 
+
+--- 2. Ping GCP WireGuard Gateway (10.200.0.1) from CM5 ---
+PING 10.200.0.1 (10.200.0.1) 56(84) bytes of data.
+64 bytes from 10.200.0.1: icmp_seq=1 ttl=64 time=76.0 ms
+64 bytes from 10.200.0.1: icmp_seq=2 ttl=64 time=83.7 ms
+64 bytes from 10.200.0.1: icmp_seq=3 ttl=64 time=78.8 ms
+64 bytes from 10.200.0.1: icmp_seq=4 ttl=64 time=79.1 ms
+
+--- 10.200.0.1 ping statistics ---
+4 packets transmitted, 4 received, 0% packet loss, time 3005ms
+rtt min/avg/max/mdev = 76.029/79.403/83.745/2.772 ms
+
+--- 3. Ping GKE Worker Nodes Internal IPs (10.20.0.6 & 10.20.0.7) from CM5 (No NAT Masquerading) ---
+PING 10.20.0.6 (10.20.0.6) 56(84) bytes of data.
+64 bytes from 10.20.0.6: icmp_seq=1 ttl=63 time=76.8 ms
+64 bytes from 10.20.0.6: icmp_seq=2 ttl=63 time=79.6 ms
+64 bytes from 10.20.0.6: icmp_seq=3 ttl=63 time=76.7 ms
+64 bytes from 10.20.0.6: icmp_seq=4 ttl=63 time=79.1 ms
+
+--- 10.20.0.6 ping statistics ---
+4 packets transmitted, 4 received, 0% packet loss, time 3004ms
+rtt min/avg/max/mdev = 76.662/78.033/79.585/1.320 ms
+
+PING 10.20.0.7 (10.20.0.7) 56(84) bytes of data.
+64 bytes from 10.20.0.7: icmp_seq=1 ttl=63 time=77.5 ms
+64 bytes from 10.20.0.7: icmp_seq=2 ttl=63 time=79.3 ms
+64 bytes from 10.20.0.7: icmp_seq=3 ttl=63 time=86.7 ms
+64 bytes from 10.20.0.7: icmp_seq=4 ttl=63 time=80.2 ms
+
+--- 10.20.0.7 ping statistics ---
+4 packets transmitted, 4 received, 0% packet loss, time 3004ms
+rtt min/avg/max/mdev = 77.483/80.907/86.681/3.471 ms
+
+--- 4. GCP VPC Route & Firewall Verification ---
+destRange: 10.200.0.0/24
+name: route-to-edge-wireguard
+network: https://www.googleapis.com/compute/v1/projects/python-gke-dt-20261027/global/networks/python-platform-vpc
+nextHopInstance: https://www.googleapis.com/compute/v1/projects/python-gke-dt-20261027/zones/europe-west1-b/instances/edge-wg-gateway
