@@ -1,17 +1,30 @@
 === AC-RPI-08: Edge GitOps & K3s Orchestration Evidence ===
-Timestamp: 2026-11-17T03:40:47Z
+Timestamp: 2026-11-17T04:12:24Z
 
 --- 1. GKE Argo CD Applications Status (Edge K3s Target over WireGuard) ---
 NAME                         SYNC STATUS   HEALTH STATUS   REVISION                                   PROJECT
-edge-ingestion-service                                                                                platform-edge
+edge-ingestion-service       Synced        Healthy         f342dc0ef6414cfc529ebe19a3831b71810f5e57   platform-edge
 platform-monitoring          Synced        Healthy                                                    platform-system
-platform-root                Synced        Healthy         17c6adcce3f1b218c35e3b22932893dbd9f486b1   platform-root
+platform-root                Synced        Healthy         f342dc0ef6414cfc529ebe19a3831b71810f5e57   platform-root
 python-platform-production   Synced        Degraded                                                   python-platform
 python-platform-staging      Synced        Degraded                                                   python-platform
 
 --- 2. Edge K3s Node & Pod Status on Raspberry Pi CM5 ---
 NAME       STATUS   ROLES           AGE   VERSION        INTERNAL-IP   EXTERNAL-IP   OS-IMAGE             KERNEL-VERSION             CONTAINER-RUNTIME
-cm5-node   Ready    control-plane   30m   v1.37.2+k3s1   10.200.0.2    <none>        Ubuntu 24.04.5 LTS   6.8.0-1065-raspi (arm64)   containerd://2.3.7-k3s1
+cm5-node   Ready    control-plane   62m   v1.37.2+k3s1   10.200.0.2    <none>        Ubuntu 24.04.5 LTS   6.8.0-1065-raspi (arm64)   containerd://2.3.7-k3s1
 
+NAME                                          READY   STATUS    RESTARTS   AGE   IP           NODE       NOMINATED NODE   READINESS GATES
+pod/edge-ingestion-service-67f48bc9d9-fb9ws   1/1     Running   0          23s   10.42.0.12   cm5-node   <none>           <none>
 
---- 3. Verify ZFS Dataset Mount (/data/annotation -> /srv/data/annotation) Inside Edge Pod ---
+NAME                             TYPE        CLUSTER-IP     EXTERNAL-IP   PORT(S)    AGE   SELECTOR
+service/edge-ingestion-service   ClusterIP   10.43.47.129   <none>        8000/TCP   16m   app=edge-ingestion-service
+
+--- 3. Verify ZFS Dataset Mount (/data/annotation -> /srv/data/annotation) & GitOps Env Revision Inside Edge Pod ---
+Filesystem                Size  Used Avail Use% Mounted on
+datapool/annotation-data   50G  128K   50G   1% /data/annotation
+total 6
+drwxrwxr-x 2    1000    1000    4 Nov 11 17:29 .
+drwxr-xr-x 1 appuser appuser 4096 Nov 17 04:12 ..
+-rw-r--r-- 1    1000    1000   64 Nov 11 17:17 annotation_sample.json
+-rw-rw-r-- 1    1000    1000   33 Nov 11 17:29 batch2.json
+rev-2

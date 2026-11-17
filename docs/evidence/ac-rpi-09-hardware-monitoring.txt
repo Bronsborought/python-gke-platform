@@ -1,0 +1,49 @@
+=== AC-RPI-09: Bare-Metal Hardware Observability (Prometheus & Grafana) Evidence ===
+Timestamp: 2026-11-17T05:00:32Z
+
+--- 1. Direct Scrape Output from RPi CM5 over WireGuard (http://10.200.0.2:9100/metrics) ---
+node_hwmon_temp_celsius{chip="1000120000_pcie_1f000c8000_adc",sensor="temp1"} 61.863
+node_hwmon_temp_celsius{chip="nvme_nvme0",sensor="temp1"} 52.85
+node_hwmon_temp_celsius{chip="nvme_nvme0",sensor="temp2"} 61.85
+node_hwmon_temp_celsius{chip="nvme_nvme0",sensor="temp3"} 52.85
+node_hwmon_temp_celsius{chip="thermal_thermal_zone0",sensor="temp0"} 50.15
+node_hwmon_temp_celsius{chip="thermal_thermal_zone0",sensor="temp1"} 50.15
+# HELP rpi_cm5_nvme_percentage_used_ratio NVMe SSD SMART percentage used (wear level)
+# TYPE rpi_cm5_nvme_percentage_used_ratio gauge
+rpi_cm5_nvme_percentage_used_ratio{device="nvme0n1",node="cm5-node"} 0
+# HELP rpi_cm5_nvme_temperature_celsius NVMe SSD (/dev/nvme0n1) SMART composite temperature in Celsius
+# TYPE rpi_cm5_nvme_temperature_celsius gauge
+rpi_cm5_nvme_temperature_celsius{device="nvme0n1",node="cm5-node"} 53
+# HELP rpi_cm5_soc_temperature_celsius Broadcom BCM2712 SoC temperature in Celsius
+# TYPE rpi_cm5_soc_temperature_celsius gauge
+rpi_cm5_soc_temperature_celsius{node="cm5-node"} 48.5
+# HELP rpi_cm5_thermal_throttled_active Thermal throttling active flag (1 = throttled, 0 = normal)
+# TYPE rpi_cm5_thermal_throttled_active gauge
+rpi_cm5_thermal_throttled_active{node="cm5-node"} 0
+# HELP rpi_cm5_throttled_status_raw Raw bitmask from vcgencmd get_throttled (0 = healthy)
+# TYPE rpi_cm5_throttled_status_raw gauge
+rpi_cm5_throttled_status_raw{node="cm5-node"} 0
+# HELP rpi_cm5_under_voltage_active Under-voltage detected flag (1 = active, 0 = normal 27W PD)
+# TYPE rpi_cm5_under_voltage_active gauge
+rpi_cm5_under_voltage_active{node="cm5-node"} 0
+# HELP rpi_cm5_zfs_pool_allocated_bytes ZFS pool allocated bytes
+# TYPE rpi_cm5_zfs_pool_allocated_bytes gauge
+rpi_cm5_zfs_pool_allocated_bytes{pool="datapool"} 2.392064e+06
+# HELP rpi_cm5_zfs_pool_free_bytes ZFS pool free bytes
+# TYPE rpi_cm5_zfs_pool_free_bytes gauge
+rpi_cm5_zfs_pool_free_bytes{pool="datapool"} 3.5003744256e+11
+# HELP rpi_cm5_zfs_pool_online_status ZFS pool ONLINE health status (1 = ONLINE, 0 = DEGRADED)
+# TYPE rpi_cm5_zfs_pool_online_status gauge
+rpi_cm5_zfs_pool_online_status{pool="datapool"} 1
+# HELP rpi_cm5_zfs_pool_size_bytes ZFS pool total size in bytes
+# TYPE rpi_cm5_zfs_pool_size_bytes gauge
+rpi_cm5_zfs_pool_size_bytes{pool="datapool"} 3.50039834624e+11
+
+--- 2. Kubernetes ServiceMonitor, PrometheusRule & Grafana Dashboard in GKE (monitoring namespace) ---
+NAME                                                                                AGE
+NAME                                                                                                   AGE
+NAME                                                              DATA   AGE
+
+--- 3. Live PromQL Query Results from GKE Prometheus Pod (Scraped over WireGuard Tunnel) ---
+
+--- 4. Active Thermal & Hardware Alerting Rules Loaded in GKE Prometheus ---

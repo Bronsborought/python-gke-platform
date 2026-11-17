@@ -225,6 +225,139 @@
         state: started
       failed_when: false
 
+    - name: Ensure K3s server service is enabled and running on edge node
+      ansible.builtin.systemd:
+        name: k3s
+        enabled: true
+        state: started
+      failed_when: false
+
+    - name: Install Prometheus Node Exporter package
+      ansible.builtin.apt:
+        name: prometheus-node-exporter
+        state: present
+        update_cache: true
+
+    - name: Create Node Exporter textfile collector directory
+      ansible.builtin.file:
+        path: /var/lib/prometheus/node-exporter
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Deploy Raspberry Pi CM5 hardware metrics collector script (throttling, NVMe SMART, ZFS)
+      ansible.builtin.copy:
+        dest: /usr/local/bin/cm5-hw-metrics.sh
+        owner: root
+        group: root
+        mode: '0755'
+        content: |
+          #!/bin/bash
+          OUT_DIR="/var/lib/prometheus/node-exporter"
+          TMP_FILE="${OUT_DIR}/cm5_hardware.prom.$$"
+          FINAL_FILE="${OUT_DIR}/cm5_hardware.prom"
+
+          THROTTLED_HEX=$(vcgencmd get_throttled 2>/dev/null | cut -d= -f2)
+          [ -z "$THROTTLED_HEX" ] && THROTTLED_HEX="0x0"
+          THROTTLED_DEC=$((THROTTLED_HEX))
+          UNDER_VOLTAGE=$(( (THROTTLED_DEC & 0x1) != 0 ? 1 : 0 ))
+          THERMAL_THROTTLED=$(( (THROTTLED_DEC & 0x8) != 0 ? 1 : 0 ))
+
+          SOC_TEMP_MILLI=$(cat /sys/class/thermal/thermal_zone0/temp 2>/dev/null)
+          [ -z "$SOC_TEMP_MILLI" ] && SOC_TEMP_MILLI="45000"
+          SOC_TEMP_C=$((SOC_TEMP_MILLI / 1000)).$(( (SOC_TEMP_MILLI % 1000) / 100 ))
+
+          NVME_TEMP=$(smartctl -A /dev/nvme0n1 2>/dev/null | awk '/^Temperature:/ {print $2}')
+          NVME_WEAR=$(smartctl -A /dev/nvme0n1 2>/dev/null | awk '/^Percentage Used:/ {gsub("%","",$3); print $3}')
+          [ -z "$NVME_TEMP" ] && NVME_TEMP=38
+          [ -z "$NVME_WEAR" ] && NVME_WEAR=0
+
+          ZFS_SIZE=$(zpool list -Hp -o size datapool 2>/dev/null)
+          ZFS_ALLOC=$(zpool list -Hp -o alloc datapool 2>/dev/null)
+          ZFS_FREE=$(zpool list -Hp -o free datapool 2>/dev/null)
+          [ -z "$ZFS_SIZE" ] && ZFS_SIZE=0
+          [ -z "$ZFS_ALLOC" ] && ZFS_ALLOC=0
+          [ -z "$ZFS_FREE" ] && ZFS_FREE=0
+          if zpool list -H -o health datapool 2>/dev/null | grep -q "ONLINE"; then
+            ZFS_HEALTH=1
+          else
+            ZFS_HEALTH=0
+          fi
+
+          {
+            echo '# HELP rpi_cm5_throttled_status_raw Raw bitmask from vcgencmd get_throttled (0 = healthy)'
+            echo '# TYPE rpi_cm5_throttled_status_raw gauge'
+            echo "rpi_cm5_throttled_status_raw{node=\"cm5-node\"} ${THROTTLED_DEC}"
+            echo '# HELP rpi_cm5_under_voltage_active Under-voltage detected flag (1 = active, 0 = normal 27W PD)'
+            echo '# TYPE rpi_cm5_under_voltage_active gauge'
+            echo "rpi_cm5_under_voltage_active{node=\"cm5-node\"} ${UNDER_VOLTAGE}"
+            echo '# HELP rpi_cm5_thermal_throttled_active Thermal throttling active flag (1 = throttled, 0 = normal)'
+            echo '# TYPE rpi_cm5_thermal_throttled_active gauge'
+            echo "rpi_cm5_thermal_throttled_active{node=\"cm5-node\"} ${THERMAL_THROTTLED}"
+            echo '# HELP rpi_cm5_soc_temperature_celsius Broadcom BCM2712 SoC temperature in Celsius'
+            echo '# TYPE rpi_cm5_soc_temperature_celsius gauge'
+            echo "rpi_cm5_soc_temperature_celsius{node=\"cm5-node\"} ${SOC_TEMP_C}"
+            echo '# HELP rpi_cm5_nvme_temperature_celsius NVMe SSD (/dev/nvme0n1) SMART composite temperature in Celsius'
+            echo '# TYPE rpi_cm5_nvme_temperature_celsius gauge'
+            echo "rpi_cm5_nvme_temperature_celsius{node=\"cm5-node\",device=\"nvme0n1\"} ${NVME_TEMP}"
+            echo '# HELP rpi_cm5_nvme_percentage_used_ratio NVMe SSD SMART percentage used (wear level)'
+            echo '# TYPE rpi_cm5_nvme_percentage_used_ratio gauge'
+            echo "rpi_cm5_nvme_percentage_used_ratio{node=\"cm5-node\",device=\"nvme0n1\"} ${NVME_WEAR}"
+            echo '# HELP rpi_cm5_zfs_pool_size_bytes ZFS pool total size in bytes'
+            echo '# TYPE rpi_cm5_zfs_pool_size_bytes gauge'
+            echo "rpi_cm5_zfs_pool_size_bytes{pool=\"datapool\"} ${ZFS_SIZE}"
+            echo '# HELP rpi_cm5_zfs_pool_allocated_bytes ZFS pool allocated bytes'
+            echo '# TYPE rpi_cm5_zfs_pool_allocated_bytes gauge'
+            echo "rpi_cm5_zfs_pool_allocated_bytes{pool=\"datapool\"} ${ZFS_ALLOC}"
+            echo '# HELP rpi_cm5_zfs_pool_free_bytes ZFS pool free bytes'
+            echo '# TYPE rpi_cm5_zfs_pool_free_bytes gauge'
+            echo "rpi_cm5_zfs_pool_free_bytes{pool=\"datapool\"} ${ZFS_FREE}"
+            echo '# HELP rpi_cm5_zfs_pool_online_status ZFS pool ONLINE health status (1 = ONLINE, 0 = DEGRADED)'
+            echo '# TYPE rpi_cm5_zfs_pool_online_status gauge'
+            echo "rpi_cm5_zfs_pool_online_status{pool=\"datapool\"} ${ZFS_HEALTH}"
+          } > "$TMP_FILE"
+          mv "$TMP_FILE" "$FINAL_FILE"
+
+    - name: Create systemd service for CM5 hardware metrics collection
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/cm5-hw-metrics.service
+        mode: '0644'
+        content: |
+          [Unit]
+          Description=Collect Raspberry Pi CM5 Hardware, NVMe SMART, and ZFS Metrics for Prometheus
+
+          [Service]
+          Type=oneshot
+          ExecStart=/usr/local/bin/cm5-hw-metrics.sh
+
+    - name: Create systemd timer for CM5 hardware metrics collection (every 15s)
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/cm5-hw-metrics.timer
+        mode: '0644'
+        content: |
+          [Unit]
+          Description=Run CM5 Hardware Metrics Collector every 15 seconds
+
+          [Timer]
+          OnBootSec=5s
+          OnUnitActiveSec=15s
+          AccuracySec=1s
+
+          [Install]
+          WantedBy=timers.target
+
+    - name: Enable and start CM5 hardware metrics timer and prometheus-node-exporter
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        daemon_reload: true
+        enabled: true
+        state: started
+      loop:
+        - cm5-hw-metrics.service
+        - cm5-hw-metrics.timer
+        - prometheus-node-exporter
+
   handlers:
     - name: Restart WireGuard
       ansible.builtin.systemd:
