@@ -176,7 +176,38 @@
         - zramswap
         - ssh
 
+    - name: Configure Site-to-Cloud WireGuard tunnel (/etc/wireguard/wg0.conf)
+      ansible.builtin.copy:
+        dest: /etc/wireguard/wg0.conf
+        owner: root
+        group: root
+        mode: '0600'
+        content: |
+          [Interface]
+          Address = 10.200.0.2/24
+          PrivateKey = {{ wg_cm5_private_key }}
+
+          [Peer]
+          # GCP VPC WireGuard Gateway (python-platform-vpc)
+          PublicKey = {{ wg_gcp_public_key }}
+          Endpoint = {{ wg_gcp_endpoint }}
+          AllowedIPs = 10.200.0.0/24, 10.20.0.0/20
+          PersistentKeepalive = 25
+      when: wg_cm5_private_key is defined and wg_gcp_public_key is defined
+      notify: Restart WireGuard
+
+    - name: Enable and start WireGuard service (wg-quick@wg0)
+      ansible.builtin.systemd:
+        name: wg-quick@wg0
+        enabled: true
+        state: started
+      when: wg_cm5_private_key is defined and wg_gcp_public_key is defined
+
   handlers:
+    - name: Restart WireGuard
+      ansible.builtin.systemd:
+        name: wg-quick@wg0
+        state: restarted
     - name: Restart zramswap
       ansible.builtin.service:
         name: zramswap
