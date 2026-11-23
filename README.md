@@ -1,215 +1,69 @@
-# Python GKE Platform
+# Python GKE Platform & Raspberry Pi CM5 Hybrid Edge
 
-A Python application delivery project using private Google Kubernetes Engine,
-Terraform, GitHub Actions, JFrog Artifactory, Helm, and Argo CD.
+Cloud-native Python FastAPI platform deployed on **Google Kubernetes Engine (GKE)** and extended to an on-premises **Raspberry Pi Compute Module 5 (ARM64) Hybrid Edge Appliance** via **Terraform**, **Ansible**, **Argo CD GitOps**, **WireGuard L3 VPN**, **ZFS on Gen3 NVMe**, **JFrog Artifactory (Multi-Arch OCI)**, and **Prometheus/Grafana**.
 
-## Repositories
+---
 
-- **python-gke-platform** — application, tests, Docker image, CI workflows,
-  Terraform infrastructure, and setup/teardown scripts.
-- [**python-gke-platform-gitops**](https://github.com/Bronsborought/python-gke-platform-gitops)
-  — Helm charts, staging/production configuration, Argo CD applications,
-  and monitoring configuration.
+## 1. Architecture Overview
 
-## Status
-
-Implemented and verified:
-- Python application and automated tests.
-- Docker packaging with non-root execution and local persistent storage.
-- GitHub Actions checks and vulnerability scanning.
-- Terraform GCS backend, custom networking, Cloud NAT and private GKE nodes.
-- JFrog Docker image publication and image pull from GKE.
-- Python package download through the JFrog PyPI proxy.
-
-Helm deployment, Argo CD delivery and cluster observability are next.
-
-See [GCP infrastructure](infra/README.md) for infrastructure setup,
-access, verification and cleanup guidance.
-
-## Local setup
-
-Run these commands from the repository root with Python 3.14 installed:
-
-```bash
-python3.14 -m venv .venv
-source .venv/bin/activate
-python -m pip install -r requirements-dev.txt
+```mermaid
+flowchart TD
+  Dev[Developer PR] --> CI[GitHub Actions CI & Security Gates]
+  CI --> Release[Multi-Arch Build: GitHub AMD64 + Native CM5 ARM64]
+  Release --> JFrog[JFrog Artifactory docker-local OCI Index]
+  Release --> GitOps[GitOps Promotion PR / Commit]
+  GitOps --> Argo[GKE Argo CD Control Plane]
+  Argo --> GKE[Private GKE Workloads: staging & production]
+  Argo -->|WireGuard L3 VPN 10.200.0.2:6443| K3s[Edge RPi CM5 K3s Cluster]
+  JFrog --> GKE
+  JFrog --> K3s
+  GKE --> GCS[Workload Identity & GCS Config Bucket]
+  K3s --> ZFS[NVMe Gen3 ZFS Pool datapool + NFSv4 + AES-256 GCS Backups]
+  GKE --> Prom[Prometheus & Grafana Observability]
+  K3s -->|WireGuard 10.200.0.2:9100| Prom
 ```
 
-`requirements.txt` contains runtime dependencies.
-`requirements-dev.txt` contains runtime and development dependencies.
+---
 
-## Run locally
+## 2. Key Engineering Capabilities
+- **Private GKE & Terraform IaC (`infra/`):** Custom VPC (`10.20.0.0/20`), private worker nodes without external IPs, Cloud Router & Cloud NAT, `/32` master authorized network lockdown, versioned GCS remote state (`infra/bootstrap`), and keyless **GKE Workload Identity** for GCS access.
+- **Hardened Multi-Arch Container & CI/CD (`.github/workflows/`):**
+  - Multi-stage `Dockerfile` pinned by SHA256 digest, offline Python wheel installation, non-root `USER 10001:10001` (`appuser`), and atomic file persistence (`NamedTemporaryFile` + `os.fsync()` + `Path.replace()`).
+  - Automated CI checks (`black`, `flake8`, `pytest`, `pip-audit`, `hadolint`) and multi-arch `Release` pipeline combining GitHub-hosted `linux/amd64` builds with **native `linux/arm64` builds on the Raspberry Pi CM5 self-hosted runner** (13s build time, zero QEMU overhead), gated by **Trivy** and promoted via `scripts/promote.py`.
+- **Declarative GitOps (`python-gke-platform-gitops`):**
+  - Managed by **Argo CD** using the App-of-Apps pattern with strict `AppProject` isolation (`platform-root`, `python-platform`, `platform-system`, `platform-edge`).
+  - Zero cluster credentials stored in GitHub Actions; all Kubernetes Secrets (`jfrog-registry`, `python-platform-app`, `grafana-admin`) are provisioned out-of-band outside Git.
+  - Known storage trade-off: `standard-rwo` (`ReadWriteOnce`) PVCs require pod colocation on the same node during multi-replica scaling.
+- **Raspberry Pi CM5 Hybrid Edge Extension (`ansible/`, `scripts/`):**
+  - **Module 1 (Ansible Bare-Metal):** Idempotent playbook (`ansible/rpi-cm5-bootstrap.yml`) configuring Ubuntu 24.04 LTS (`aarch64`), PCIe Gen 3 (`8GT/s`), ZRAM, sysctl forwarding, and UFW default-deny firewall.
+  - **Module 2 (ZFS, NFSv4 & Encrypted Backups):** 326GB ZFS pool (`datapool`, `zstd` compression, `50G`/`20G` quotas, UID `10001:10001` permissions), LAN NFSv4 export (`/srv/data/annotation`), hourly ZFS snapshots, and daily AES-256-CBC encrypted backups (`scripts/backup_to_gcs.sh`) to GCS with 90-day Coldline lifecycle.
+  - **Module 3 (Site-to-Cloud WireGuard VPN):** Persistent L3 WireGuard tunnel (`10.200.0.2` ↔ GCP VPC `10.200.0.1`) with static VPC routing to GKE Node (`10.20.0.0/20`) and Pod (`10.24.0.0/16`) CIDRs without NAT masquerading.
+  - **Module 5 & 6 (Edge K3s GitOps & Hardware Observability):** Single-node K3s cluster managed remotely by GKE Argo CD over WireGuard, plus 15-second hardware telemetry (`cm5-hw-metrics.sh`: BCM2712 SoC temperature, 27W USB-C PD throttling bitmask, NVMe SMART wear, ZFS pool health) scraped by GKE Prometheus.
+- **Full-Stack Observability (`monitoring/`):**
+  - Pinned `kube-prometheus-stack` with 15-second application `ServiceMonitor`, 8-panel `"Python GKE Platform"` and 4-panel `"On-Prem Edge Infrastructure"` Grafana dashboards, and alerting rules (`HighErrorRate`, `PodCrashLooping`, `HighDiskUtilization`, `RPiCM5HighSoCTemperature > 75C`).
 
+---
+
+## 3. Acceptance Evidence
+See the complete verification matrix in [**`docs/acceptance.md`**](docs/acceptance.md) and raw terminal/telemetry evidence in [**`docs/evidence/`**](docs/evidence/).
+
+---
+
+## 4. Lifecycle Automation (`setup.sh` & `teardown.sh`)
+
+### Prerequisites
+- Authenticated `gcloud`, `terraform`, `kubectl`, and local out-of-band `terraform.tfvars` + `backend.tfbackend` files in `infra/bootstrap/` and `infra/environments/prod/`.
+- On a brand-new GCP project, first create the state bucket with local state per `infra/README.md` and migrate state to GCS before running `scripts/setup.sh`.
+
+### Provisioning & Teardown
 ```bash
-APP_ENV=local DATA_DIR=./data LOG_LEVEL=INFO \
-python -m uvicorn app.main:app \
-  --host 127.0.0.1 \
-  --port 8000 \
-  --reload
+# Provision infrastructure and bootstrap Argo CD
+export GITOPS_REPO="$HOME/devops_tasks/task12-python-gke-gitops/python-gke-platform-gitops"
+export GCP_PROJECT_ID="python-gke-dt-20261027"
+export GKE_ZONE="europe-west1-b"
+export GKE_CLUSTER="python-platform"
+./scripts/setup.sh
+
+# Tear down GKE workloads, Ingress LB, and Terraform infrastructure safely
+./scripts/teardown.sh
 ```
-
-The reload option is intended for local development.
-
-## Endpoints
-
-| Method | Path | Purpose |
-| --- | --- | --- |
-| GET | `/` | Application status, environment, and pod name |
-| GET | `/healthz` | Process liveness |
-| GET | `/ready` | Storage write/read readiness check |
-| POST | `/data` | Save text from a JSON `content` field |
-| GET | `/data` | Read the saved text |
-| GET | `/metrics` | Prometheus metrics |
-
-## Configuration
-
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `APP_ENV` | `local` | Environment name |
-| `POD_NAME` | System hostname | Pod identifier |
-| `DATA_DIR` | `./data` | Storage directory |
-| `LOG_LEVEL` | `INFO` | Application logging level |
-
-## Verify data storage
-
-With the server running:
-
-```bash
-curl -i http://127.0.0.1:8000/ready
-
-curl -i -X POST http://127.0.0.1:8000/data \
-  -H 'Content-Type: application/json' \
-  -d '{"content":"Hello from python-gke-platform"}'
-
-curl -i http://127.0.0.1:8000/data
-```
-
-Each POST replaces the previous content in `DATA_DIR/payload.txt`.
-The content field accepts at most 100,000 characters.
-Writes use a temporary file followed by an atomic replacement.
-
-Data survives application restarts when the same storage directory is used.
-Container and Kubernetes persistence require a mounted persistent volume.
-
-GET `/data` returns 404 when no data has been saved.
-Storage failures return 503; invalid request bodies return 422.
-
-## Metrics
-
-- `http_requests_total` — request count by method, route, and status code.
-- `http_request_duration_seconds` — request duration histogram by method and route.
-
-Requests to `/metrics` are excluded from these measurements.
-Metrics are held in process memory and reset on restart.
-The current implementation uses one application worker per instance.
-
-## Checks and tests
-
-```bash
-python -m black --check app tests
-python -m flake8 app tests
-python -m pytest -v --junitxml=junit.xml
-```
-
-Tests use temporary storage and do not modify local application data.
-
-## Planned layout
-
-- `app/` — Python application.
-- `tests/` — application tests.
-- `infra/` — infrastructure configuration, modules and verification manifests.
-- `scripts/` — setup, verification, and teardown scripts.
-- `docs/` — architecture, operating instructions, and acceptance evidence.
-- `.github/workflows/` — CI workflows.
-
-## Local Docker run
-
-Build the image:
-
-```bash
-docker build -t python-gke-platform:local .
-```
-
-The image uses Python 3.14 slim and a multi-stage build.
-The application runs as UID/GID 10001 without root privileges.
-The locally verified linux/amd64 image size was 194.10 MB.
-
-Create persistent storage and start the container:
-
-```bash
-docker volume create python-gke-platform-data
-
-docker run -d \
-  --name python-gke-platform-local \
-  -p 127.0.0.1:8001:8000 \
-  -e APP_ENV=local \
-  --mount type=volume,source=python-gke-platform-data,target=/data \
-  python-gke-platform:local
-```
-
-The application is available at http://127.0.0.1:8001.
-The container defaults to PORT=8000 and DATA_DIR=/data.
-If PORT is overridden, update the container port mapping accordingly.
-
-Wait for readiness:
-
-```bash
-curl --retry 10 --retry-all-errors --retry-delay 1 \
-  --max-time 3 --retry-max-time 20 \
-  -fsS http://127.0.0.1:8001/ready
-```
-
-Write and read data:
-
-```bash
-curl -fsS -X POST http://127.0.0.1:8001/data \
-  -H 'Content-Type: application/json' \
-  -d '{"content":"Hello from Docker volume"}'
-
-curl -fsS http://127.0.0.1:8001/data
-```
-
-Inspect logs and metrics:
-
-```bash
-docker logs --tail 30 python-gke-platform-local
-curl -fsS http://127.0.0.1:8001/metrics
-```
-
-Stop and remove the container:
-
-```bash
-docker stop python-gke-platform-local
-docker rm python-gke-platform-local
-```
-
-The named volume remains after container removal. Run the same
-`docker run` command again to reuse the saved data.
-
-To permanently delete the stored data after removing the container:
-
-```bash
-docker volume rm python-gke-platform-data
-```
-
-## Raspberry Pi CM5 hybrid edge
-
-Initial hardware and operating system setup verified:
-- Compute module: Raspberry Pi Compute Module 5 Lite Rev 1.0 (8 GB RAM, no onboard eMMC).
-- Carrier board: Waveshare CM5-IO-BASE-B with passive heatsink, external SMA antenna (`dtparam=ant2`), and official 27W USB-C power supply (`throttled=0x0`).
-- Storage: 512 GB M.2 2230 PCIe NVMe SSD (`/dev/nvme0n1`, 476.9 GiB usable, Biwin/KingSpec controller supporting PCIe Gen 3 `8GT/s`, initial link `5GT/s`).
-- Operating system: Ubuntu Server 24.04.5 LTS (`aarch64`, kernel `6.8.0-1064-raspi`), hostname `cm5-node`.
-- Access and network: Ed25519 SSH key authentication, passwordless `sudo`, and MAC-based DHCP lease over Wi-Fi (`wlan0`) and Ethernet (`eth0`).
-
-Storage layout decision for ZFS:
-- Because the module is a CM5 Lite without onboard eMMC, the operating system boots from `/dev/nvme0n1` (`nvme0n1p1` `/boot/firmware` and `nvme0n1p2` `/`).
-- Using the whole `/dev/nvme0n1` device directly for `zpool create` would overwrite the running OS; therefore, the NVMe SSD will be partitioned so the OS remains on `nvme0n1p1`/`nvme0n1p2` and the ZFS pool `datapool` uses a dedicated partition (`/dev/nvme0n1p3`) on the same NVMe drive.
-
-Next steps (not yet executed):
-- Module 1: Ansible bootstrap (`ansible/rpi-cm5-bootstrap.yml`).
-- Module 2: ZFS pool `datapool`, datasets/quotas, NFSv4 export, and encrypted GCS backups.
-- Module 3: Site-to-cloud WireGuard VPN tunnel to GCP VPC.
-- Module 4: Native ARM64 GitHub Actions runner and multi-arch publishing to JFrog Artifactory.
-- Module 5: K3s edge node managed by central Argo CD in GKE.
-- Module 6: Hardware metrics (`node_exporter` + textfile collector) in Prometheus and Grafana.

@@ -1,0 +1,7 @@
+NAME                         SYNC STATUS   HEALTH STATUS
+edge-ingestion-service       Unknown       Healthy
+platform-monitoring          Synced        Healthy
+platform-observability       Synced        Healthy
+platform-root                Synced        Healthy
+python-platform-production   Synced        Healthy
+python-platform-staging      Synced        Healthy
