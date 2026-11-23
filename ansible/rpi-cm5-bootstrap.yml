@@ -218,19 +218,102 @@
         state: started
       failed_when: false
 
-    - name: Ensure K3s server service is enabled and running on edge node
+    - name: Create ZFS storage pool datapool on NVMe partition if not present
+      ansible.builtin.command: >
+        zpool create -f -o ashift=12
+        -O compression=zstd -O atime=off -O xattr=sa -O acltype=posixacl
+        -m /srv/data datapool /dev/nvme0n1p3
+      args:
+        creates: /srv/data
+
+    - name: Create ZFS datasets and enforce storage quotas (50G annotation, 20G cache)
+      ansible.builtin.shell: |
+        set -e
+        zfs list datapool/annotation-data >/dev/null 2>&1 || zfs create -o mountpoint=/srv/data/annotation datapool/annotation-data
+        zfs set quota=50G compression=zstd datapool/annotation-data
+        zfs list datapool/edge-cache >/dev/null 2>&1 || zfs create -o mountpoint=/srv/data/cache datapool/edge-cache
+        zfs set quota=20G compression=zstd datapool/edge-cache
+      changed_when: false
+
+    - name: Enforce rootless container UID/GID 10001:10001 permissions on ZFS annotation mountpoint
+      ansible.builtin.file:
+        path: /srv/data/annotation
+        state: directory
+        owner: "10001"
+        group: "10001"
+        mode: '0775'
+
+    - name: Configure NFSv4 export for /srv/data/annotation in /etc/exports
+      ansible.builtin.lineinfile:
+        path: /etc/exports
+        regexp: '^/srv/data/annotation\s+'
+        line: '/srv/data/annotation 192.168.88.0/24(rw,sync,no_subtree_check,no_root_squash)'
+        create: true
+        mode: '0644'
+      notify: Reload NFS exports
+
+    - name: Create protected backup configuration directory (/etc/cm5-backup)
+      ansible.builtin.file:
+        path: /etc/cm5-backup
+        state: directory
+        owner: root
+        group: root
+        mode: '0700'
+
+    - name: Deploy automated ZFS encrypted backup script (/usr/local/bin/cm5-zfs-backup.sh)
+      ansible.builtin.copy:
+        src: ../scripts/backup_to_gcs.sh
+        dest: /usr/local/bin/cm5-zfs-backup.sh
+        owner: root
+        group: root
+        mode: '0750'
+
+    - name: Create systemd service and daily timer for encrypted ZFS backups
+      ansible.builtin.copy:
+        dest: "/etc/systemd/system/{{ item.name }}"
+        mode: '0644'
+        content: "{{ item.content }}"
+      loop:
+        - name: cm5-zfs-backup.service
+          content: |
+            [Unit]
+            Description=Encrypted ZFS Incremental/Full Backup to Cloud Storage
+            After=network-online.target zfs-mount.service
+
+            [Service]
+            Type=oneshot
+            EnvironmentFile=-/etc/cm5-backup/backup.env
+            ExecStart=/usr/local/bin/cm5-zfs-backup.sh
+        - name: cm5-zfs-backup.timer
+          content: |
+            [Unit]
+            Description=Run Encrypted ZFS Cloud Backup Daily at 02:00 UTC
+
+            [Timer]
+            OnCalendar=*-*-* 02:00:00
+            Persistent=true
+
+            [Install]
+            WantedBy=timers.target
+
+    - name: Enable daily ZFS backup systemd timer
       ansible.builtin.systemd:
-        name: k3s
+        name: cm5-zfs-backup.timer
+        daemon_reload: true
         enabled: true
         state: started
-      failed_when: false
+
+    - name: Install K3s single-node ARM64 server if binary is not present
+      ansible.builtin.shell: |
+        curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="server --node-ip=10.200.0.2 --advertise-address=10.200.0.2 --tls-san=10.200.0.2 --flannel-iface=wg0 --write-kubeconfig-mode=644" sh -
+      args:
+        creates: /usr/local/bin/k3s
 
     - name: Ensure K3s server service is enabled and running on edge node
       ansible.builtin.systemd:
         name: k3s
         enabled: true
         state: started
-      failed_when: false
 
     - name: Install Prometheus Node Exporter package
       ansible.builtin.apt:
