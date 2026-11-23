@@ -56,6 +56,16 @@ jobs:
           push: true
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}-amd64
 
+      - name: Scan linux/amd64 release image with Trivy
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}-amd64
+          format: table
+          exit-code: "1"
+          ignore-unfixed: true
+          vuln-type: os,library
+          severity: CRITICAL,HIGH
+
   build-arm64:
     name: Build & Push Native ARM64 (RPi CM5)
     runs-on: [self-hosted, linux, arm64, rpi-cm5]
@@ -81,10 +91,13 @@ jobs:
           docker push "${IMAGE}"
 
   publish-multiarch:
-    name: Assemble Multi-Arch Manifest in JFrog
+    name: Assemble Multi-Arch Manifest & Promote to GitOps
     runs-on: ubuntu-24.04
     needs: [build-amd64, build-arm64]
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Log in to JFrog Artifactory
         uses: docker/login-action@v3
         with:
@@ -93,6 +106,7 @@ jobs:
           password: ${{ secrets.JFROG_TOKEN }}
 
       - name: Create and push multi-arch OCI manifest list
+        id: manifest
         run: |
           VERSION="${{ needs.build-amd64.outputs.version }}"
           BASE_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
@@ -101,4 +115,27 @@ jobs:
             -t "${BASE_IMAGE}:latest" \
             "${BASE_IMAGE}:${VERSION}-amd64" \
             "${BASE_IMAGE}:${VERSION}-arm64"
+          DIGEST=$(docker buildx imagetools inspect "${BASE_IMAGE}:${VERSION}" | awk '/^Digest:/ {print $2}')
+          echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
           docker buildx imagetools inspect "${BASE_IMAGE}:${VERSION}"
+
+      - name: Promote release image tag and digest to GitOps repository
+        if: env.GITOPS_PAT != ''
+        env:
+          GITOPS_PAT: ${{ secrets.GITOPS_REPO_TOKEN }}
+        run: |
+          VERSION="${{ needs.build-amd64.outputs.version }}"
+          DIGEST="${{ steps.manifest.outputs.digest }}"
+          git clone "https://x-access-token:${GITOPS_PAT}@github.com/Bronsborought/python-gke-platform-gitops.git" /tmp/gitops
+          python3 scripts/promote.py \
+            --values-file /tmp/gitops/environments/staging/values.yaml \
+            --repository "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}" \
+            --tag "${VERSION}" \
+            --digest "${DIGEST}"
+          cd /tmp/gitops
+          if ! git diff --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit -am "chore(gitops): promoted ${VERSION} (${DIGEST}) to staging"
+            git push origin main
+          fi
