@@ -1,0 +1,12 @@
+=== GKE Prometheus Application Scraping & PromQL Verification (Step 112) ===
+Timestamp: 2026-11-23T17:31:36Z
+
+--- 1. Targets UP: up{service="python-platform"} ---
+
+--- 2. Request Rate per Namespace: sum by (namespace) (rate(http_requests_total{service="python-platform"}[2m])) ---
+
+--- 3. Latency p95: histogram_quantile(0.95, ...) ---
+
+--- 4. PVC Capacity Bytes: kubelet_volume_stats_capacity_bytes{persistentvolumeclaim="python-platform-data"} ---
+
+--- 5. Loaded Application Alert Rules (HighErrorRate, PodCrashLooping, HighDiskUtilization) ---
