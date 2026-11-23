@@ -1,0 +1,3 @@
+NAME                                                  STATUS   ROLES    AGE    VERSION               INTERNAL-IP   EXTERNAL-IP   OS-IMAGE                             KERNEL-VERSION      CONTAINER-RUNTIME
+gke-python-platform-python-platform-p-24d3b7b3-cnb6   Ready    <none>   129m   v1.36.4-gke.2377000   10.20.0.8     <none>        Container-Optimized OS from Google   6.12.110+ (amd64)   containerd://2.2.7
+gke-python-platform-python-platform-p-24d3b7b3-g6tg   Ready    <none>   129m   v1.36.4-gke.2377000   10.20.0.9     <none>        Container-Optimized OS from Google   6.12.110+ (amd64)   containerd://2.2.7
